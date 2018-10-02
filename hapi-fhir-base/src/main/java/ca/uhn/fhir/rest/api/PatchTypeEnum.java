@@ -27,7 +27,7 @@ import ca.uhn.fhir.rest.annotation.Patch;
  */
 public enum PatchTypeEnum {
 
-	JSON_PATCH(Constants.CT_JSON_PATCH), XML_PATCH(Constants.CT_XML_PATCH);
+	JSON_PATCH(Constants.CT_JSON_PATCH), XML_PATCH(Constants.CT_XML_PATCH), FHIRPATH_PATCH_XML(Constants.CT_FHIR_XML_NEW), FHIRPATH_PATCH_JSON(Constants.CT_FHIR_JSON_NEW);
 
 	private final String myContentType;
 
