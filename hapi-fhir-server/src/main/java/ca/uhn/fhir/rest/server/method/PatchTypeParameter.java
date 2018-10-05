@@ -55,6 +55,10 @@ class PatchTypeParameter implements IParameter {
 			return PatchTypeEnum.JSON_PATCH;
 		} else if (Constants.CT_XML_PATCH.equals(contentType)) {
 			return PatchTypeEnum.XML_PATCH;
+		} else if (Constants.CT_FHIR_JSON_NEW.equals(contentType)) {
+			return PatchTypeEnum.FHIRPATH_PATCH_JSON;
+		} else if (Constants.CT_FHIR_XML_NEW.equals(contentType)) {
+			return PatchTypeEnum.FHIRPATH_PATCH_XML;
 		} else {
 			throw new InvalidRequestException("Invalid Content-Type for PATCH operation: " + contentTypeAll);
 		}
