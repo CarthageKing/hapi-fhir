@@ -187,7 +187,7 @@ public class ResourceParameter implements IParameter {
 			}
 		} catch (DataFormatException e) {
 			String msg = ctx.getLocalizer().getMessage(ResourceParameter.class, "failedToParseRequest", encoding.name(), e.getMessage());
-			throw new InvalidRequestException(msg);
+			throw (InvalidRequestException) new InvalidRequestException(msg).initCause(e);
 		}
 
 		return retVal;
