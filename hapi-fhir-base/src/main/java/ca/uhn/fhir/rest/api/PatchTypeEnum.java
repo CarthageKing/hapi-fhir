@@ -30,7 +30,9 @@ import ca.uhn.fhir.util.UrlUtil;
 public enum PatchTypeEnum {
 
 	JSON_PATCH(Constants.CT_JSON_PATCH),
-	XML_PATCH(Constants.CT_XML_PATCH);
+	XML_PATCH(Constants.CT_XML_PATCH),
+	FHIRPATH_PATCH_XML(Constants.CT_FHIR_XML_NEW), 
+	FHIRPATH_PATCH_JSON(Constants.CT_FHIR_JSON_NEW);
 
 	private final String myContentType;
 
@@ -53,6 +55,10 @@ public enum PatchTypeEnum {
 			return JSON_PATCH;
 		} else if (Constants.CT_XML_PATCH.equals(contentType)) {
 			return XML_PATCH;
+		} else if (Constants.CT_FHIR_JSON_NEW.equals(contentType)) {
+			return PatchTypeEnum.FHIRPATH_PATCH_JSON;
+		} else if (Constants.CT_FHIR_XML_NEW.equals(contentType)) {
+			return PatchTypeEnum.FHIRPATH_PATCH_XML;
 		} else {
 			throw new InvalidRequestException("Invalid Content-Type for PATCH operation: " + UrlUtil.sanitizeUrlPart(theContentType));
 		}
