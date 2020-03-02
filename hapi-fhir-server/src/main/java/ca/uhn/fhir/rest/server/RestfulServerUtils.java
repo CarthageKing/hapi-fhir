@@ -805,6 +805,8 @@ public class RestfulServerUtils {
 					case UPDATE:
 					case READ:
 					case VREAD:
+					case PATCH:
+					case DELETE:
 						if (fullId != null && fullId.hasVersionIdPart()) {
 							String versionIdPart = fullId.getVersionIdPart();
 							response.addHeader(Constants.HEADER_ETAG, createEtag(versionIdPart));
