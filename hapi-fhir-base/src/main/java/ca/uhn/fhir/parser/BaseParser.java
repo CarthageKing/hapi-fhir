@@ -856,7 +856,7 @@ public abstract class BaseParser implements IParser {
 		return retVal;
 	}
 
-	private String getSubsettedCodeSystem() {
+	public String getSubsettedCodeSystem() {
 		if (myContext.getVersion().getVersion().isEqualOrNewerThan(FhirVersionEnum.R4)) {
 			return Constants.TAG_SUBSETTED_SYSTEM_R4;
 		} else {
@@ -988,7 +988,7 @@ public abstract class BaseParser implements IParser {
 		return true;
 	}
 
-	private String subsetDescription() {
+	public String subsetDescription() {
 		return "Resource encoded in summary mode";
 	}
 

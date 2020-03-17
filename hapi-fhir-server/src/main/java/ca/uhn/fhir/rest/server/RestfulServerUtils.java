@@ -20,13 +20,55 @@ package ca.uhn.fhir.rest.server;
  * #L%
  */
 
+import static org.apache.commons.lang3.StringUtils.isBlank;
+import static org.apache.commons.lang3.StringUtils.isNotBlank;
+import static org.apache.commons.lang3.StringUtils.replace;
+import static org.apache.commons.lang3.StringUtils.trim;
+
+import java.io.IOException;
+import java.io.Writer;
+import java.lang.reflect.Field;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Date;
+import java.util.EnumSet;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.StringTokenizer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
+import javax.annotation.Nonnull;
+import javax.servlet.http.HttpServletRequest;
+
+import org.hl7.fhir.instance.model.api.IAnyResource;
+import org.hl7.fhir.instance.model.api.IBase;
+import org.hl7.fhir.instance.model.api.IBaseBinary;
+import org.hl7.fhir.instance.model.api.IBaseCoding;
+import org.hl7.fhir.instance.model.api.IBaseMetaType;
+import org.hl7.fhir.instance.model.api.IBaseReference;
+import org.hl7.fhir.instance.model.api.IBaseResource;
+import org.hl7.fhir.instance.model.api.IDomainResource;
+import org.hl7.fhir.instance.model.api.IIdType;
+import org.hl7.fhir.instance.model.api.IPrimitiveType;
+
+import ca.uhn.fhir.context.BaseRuntimeChildDefinition;
+import ca.uhn.fhir.context.BaseRuntimeDeclaredChildDefinition;
 import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.context.FhirVersionEnum;
+import ca.uhn.fhir.context.RuntimeResourceDefinition;
 import ca.uhn.fhir.model.api.IResource;
 import ca.uhn.fhir.model.api.Include;
 import ca.uhn.fhir.model.api.ResourceMetadataKeyEnum;
 import ca.uhn.fhir.model.primitive.InstantDt;
 import ca.uhn.fhir.model.valueset.BundleTypeEnum;
+import ca.uhn.fhir.parser.BaseParser;
 import ca.uhn.fhir.parser.IParser;
 import ca.uhn.fhir.rest.api.Constants;
 import ca.uhn.fhir.rest.api.EncodingEnum;
@@ -45,27 +87,6 @@ import ca.uhn.fhir.rest.server.method.SummaryEnumParameter;
 import ca.uhn.fhir.util.BinaryUtil;
 import ca.uhn.fhir.util.DateUtils;
 import ca.uhn.fhir.util.UrlUtil;
-import org.hl7.fhir.instance.model.api.IAnyResource;
-import org.hl7.fhir.instance.model.api.IBaseBinary;
-import org.hl7.fhir.instance.model.api.IBaseReference;
-import org.hl7.fhir.instance.model.api.IBaseResource;
-import org.hl7.fhir.instance.model.api.IDomainResource;
-import org.hl7.fhir.instance.model.api.IIdType;
-import org.hl7.fhir.instance.model.api.IPrimitiveType;
-
-import javax.annotation.Nonnull;
-import javax.servlet.http.HttpServletRequest;
-import java.io.IOException;
-import java.io.Writer;
-import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-
-import static org.apache.commons.lang3.StringUtils.isBlank;
-import static org.apache.commons.lang3.StringUtils.isNotBlank;
-import static org.apache.commons.lang3.StringUtils.replace;
-import static org.apache.commons.lang3.StringUtils.trim;
 
 public class RestfulServerUtils {
 	static final Pattern ACCEPT_HEADER_PATTERN = Pattern.compile("\\s*([a-zA-Z0-9+.*/-]+)\\s*(;\\s*([a-zA-Z]+)\\s*=\\s*([a-zA-Z0-9.]+)\\s*)?(,?)");
@@ -888,6 +909,10 @@ public class RestfulServerUtils {
 			contentType = null;
 		} else if (encodingDomainResourceAsText) {
 			contentType = Constants.CT_HTML;
+			if (theResource instanceof IDomainResource) {
+				// DSTU3+
+				contentType = responseEncoding.getResourceContentType();
+			}
 		} else {
 			contentType = responseEncoding.getResourceContentType();
 		}
@@ -901,11 +926,50 @@ public class RestfulServerUtils {
 			writer.append(((IResource) theResource).getText().getDiv().getValueAsString());
 		} else if (encodingDomainResourceAsText && theResource instanceof IDomainResource) {
 			// DSTU3+
-			try {
-				writer.append(((IDomainResource) theResource).getText().getDivAsString());
-			} catch (Exception e) {
-				throw new InternalErrorException(e);
+			// Return only 'text', 'id', 'meta' elements + only top-level mandatory elements
+			RuntimeResourceDefinition rsrcDef = theServer.getFhirContext().getResourceDefinition(theResource);
+			for (BaseRuntimeChildDefinition child : rsrcDef.getChildrenAndExtension()) {
+				if (child.getMin() < 1) {
+					// not mandatory
+					if ("meta".equals(child.getElementName())) {
+						// do nothing
+					} else if ("id".equals(child.getElementName())) {
+						// do nothing
+					} else if ("text".equals(child.getElementName())) {
+						// do nothing
+					} else {
+						if (child instanceof BaseRuntimeDeclaredChildDefinition) {
+							BaseRuntimeDeclaredChildDefinition dc = (BaseRuntimeDeclaredChildDefinition) child;
+							Field f = dc.getField();
+							if (List.class.isAssignableFrom(f.getType())) {
+								List<IBase> lst = child.getAccessor().getValues(theResource);
+								if (lst.size() > 0) {
+									lst.clear();
+								}
+							} else {
+								child.getMutator().setValue(theResource, null);
+							}
+						}
+					}
+				}
 			}
+			FhirVersionEnum forVersion = theResource.getStructureFhirVersionEnum();
+			BaseParser parser = (BaseParser) getNewParser(theServer.getFhirContext(), forVersion, theRequestDetails);
+			// add subsetted if not already present
+			IBaseMetaType meta = theResource.getMeta();
+			boolean foundSubsetted = false;
+			String subsSystem = parser.getSubsettedCodeSystem();
+			String subsCode = Constants.TAG_SUBSETTED_CODE;
+			String subsDisplay = parser.subsetDescription();
+			for (IBaseCoding c : meta.getTag()) {
+				if (subsSystem.equals(c.getSystem()) && subsCode.equals(c.getCode())) {
+					foundSubsetted = true;
+				}
+			}
+			if (!foundSubsetted) {
+				meta.addTag().setSystem(subsSystem).setCode(subsCode).setDisplay(subsDisplay);
+			}
+			parser.encodeResourceToWriter(theResource, writer);
 		} else {
 			FhirVersionEnum forVersion = theResource.getStructureFhirVersionEnum();
 			IParser parser = getNewParser(theServer.getFhirContext(), forVersion, theRequestDetails);
